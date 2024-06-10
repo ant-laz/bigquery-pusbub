@@ -43,14 +43,6 @@ def gen_data(gcp_project, bq_dataset, bq_table, interval, total):
         print(f"generated record {i+1} out of {total}")
         time.sleep(interval)
 
-
-
-
-
-
-
-
-
 ########################################################################################
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

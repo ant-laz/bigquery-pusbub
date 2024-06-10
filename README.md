@@ -70,12 +70,11 @@ python bq_gen_data.py \
 --total=10
 ```
 
-## Creating demo output - a pub/sub topic to stream to
-
-todo
-
 ## Creating demo app - the core program that does the micro-batch streaming
 
-todo
-
-## Example of running the demo :: end-to-end
+```shell
+python bq_stream_data.py \
+--gcp_project=${GCP_PROJECT_ID} \
+--bq_dataset=${BQ_DATASET} \
+--bq_table=${BQ_TABLE}
+```

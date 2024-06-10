@@ -13,20 +13,34 @@
 #    limitations under the License.
 
 import argparse
+import datetime
 from google.cloud import bigquery
 
-def process_data_in_bq():
+def process_data_in_bq(gcp_project, bq_dataset, bq_table):
     client = bigquery.Client()
-
+    now = datetime.datetime.now()
+    now_str = str(now)
     # Perform a query.
-    QUERY = (
-        'SELECT name FROM `bigquery-public-data.usa_names.usa_1910_2013` '
-        'WHERE state = "TX" AND name IS NOT NULL '
-        'LIMIT 100')
+    QUERY = f"""
+        SELECT
+            event_timestamp,
+            user_id,
+            device_category,
+            geo_country,
+            ecommerce_purchase_revenue_in_usd,
+            _CHANGE_TYPE AS change_type,
+            _CHANGE_TIMESTAMP AS change_time
+        FROM
+            APPENDS(TABLE `{gcp_project}.{bq_dataset}.{bq_table}`, 
+                    NULL, --start_timestamp
+                    PARSE_TIMESTAMP("%F %H:%M:%E*S", "{now_str}") --end_timestamp
+                    );
+    """
+    print(QUERY)      
     query_job = client.query(QUERY)  # API request
     rows = query_job.result()  # Waits for query to finish
     for row in rows:
-        print(row.name)    
+        print(row)    
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -47,10 +61,9 @@ if __name__ == "__main__":
         type=str, 
         help='target bigquery table'
         )        
-    parser.add_argument(
-        '--interval', 
-        type=int,
-        help='seconds between appending new records'
-        )
     args = parser.parse_args()
-    process_data_in_bq()
+    process_data_in_bq(
+        args.gcp_project,
+        args.bq_dataset,
+        args.bq_table
+    )
