@@ -76,5 +76,6 @@ python bq_gen_data.py \
 python bq_stream_data.py \
 --gcp_project=${GCP_PROJECT_ID} \
 --bq_dataset=${BQ_DATASET} \
---bq_table=${BQ_TABLE}
+--bq_table=${BQ_TABLE} \
+--this_sync_start="2024-06-10 10:49:26.776000"
 ```
