@@ -14,14 +14,54 @@
 
 import argparse
 import datetime
+from datetime import date, timedelta
+import time
 from google.cloud import bigquery
+from google.api_core.exceptions import NotFound
 
-def process_data_in_bq(gcp_project, bq_dataset, bq_table, this_sync_start):
+def process_newly_added_rows(rows, this_sync_start, this_sync_end):
+    print(f"{this_sync_start} to {this_sync_end} - {rows.total_rows} rows added")
+
+def get_table_id(gcp_project, bq_dataset, bq_table_prefix, bq_table_date):
+    """
+    As per the docs: 
+    https://support.google.com/analytics/answer/7029846?sjid=4108693678746207990-EU
+    A table events_intraday_YYYYMMDD is created. 
+    This table is populated continuously as events are recorded throughout the day. 
+    This table is deleted at the end of each day once events_YYYYMMDD is complete.
+
+    This functions checks for the deletion of events_intraday_YYYYMMDD. 
+
+    If deletion has occured, switch over to events_intraday_YYYYMMDD+1.
+    """
     client = bigquery.Client()
-    now = datetime.datetime.now()
+    table_id = f"{gcp_project}.{bq_dataset}.{bq_table_prefix}_{bq_table_date}"
+    try:
+        client.get_table(table_id) 
+        #proj.dataset.prefix_YYYYMMDD still exists, continue to use it 
+        return table_id
+    except NotFound:
+        #proj.dataset.prefix_YYYYMMDD no longers exists
+        #as per docs, assume auto-deletion
+        #as per docs, switch to proj.dataset.prefix_YYYYMMDD+1
+        deleted_date = date.fromiosformat(bq_table_date)
+        new_date = deleted_date + timedelta(days=1)
+        new_date_str = new_date.strftime("%Y%m%d")
+        new_table_id = f"{gcp_project}.{bq_dataset}.{bq_table_prefix}_{new_date}"
+        return new_table_id
+
+def process_data_in_bq(
+        gcp_project, 
+        bq_dataset, 
+        bq_table_prefix, 
+        bq_table_date, 
+        this_sync_start, 
+        poll_rate_s):
+    client = bigquery.Client()
+    now = datetime.datetime.now(datetime.timezone.utc)
     this_sync_end = str(now)
     while(True):
-        # grab all rows inserted into table since last_sync_time
+        bq_table = get_table_id(gcp_project, bq_dataset, bq_table_prefix, bq_table_date)
         QUERY = f"""
         SELECT
             event_timestamp,
@@ -33,21 +73,19 @@ def process_data_in_bq(gcp_project, bq_dataset, bq_table, this_sync_start):
             _CHANGE_TIMESTAMP AS change_time
         FROM
             APPENDS(
-                TABLE `{gcp_project}.{bq_dataset}.{bq_table}`, 
-                PARSE_TIMESTAMP("%F %H:%M:%E*S", "{this_sync_start}"), --start_timestamp
-                PARSE_TIMESTAMP("%F %H:%M:%E*S", "{this_sync_end}")    --end_timestamp
+                TABLE `{bq_table}`, 
+                PARSE_TIMESTAMP("%F %H:%M:%E*S%Ez", "{this_sync_start}"), --start_ts
+                PARSE_TIMESTAMP("%F %H:%M:%E*S%Ez", "{this_sync_end}")    --end_ts
                 );
         """
         print(QUERY)
-        query_job = client.query(QUERY)
-        rows = query_job.result()
-        # process data retreived
-        for row in rows:
-            print(row)
-        # move sync windows forward
-        now = datetime.datetime.now()
+        rows = client.query_and_wait(QUERY)    
+        process_newly_added_rows(rows, this_sync_start, this_sync_end)
+        time.sleep(1.0*int(poll_rate_s))
+        now = datetime.datetime.now(datetime.timezone.utc)
         this_sync_start = this_sync_end #the previous end becomes the next start
         this_sync_end = str(now)
+        
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -64,10 +102,20 @@ if __name__ == "__main__":
         help='target bigquery dataset'
         )
     parser.add_argument(
-        '--bq_table',  
+        '--bq_table_prefix',  
         type=str, 
-        help='target bigquery table'
-        )  
+        help='target bigquery table prefix'
+        ) 
+    parser.add_argument(
+        '--bq_table_date',  
+        type=str, 
+        help='target wildcard bigquery table suffix YYYMMDD'
+        )      
+    parser.add_argument(
+        '--poll_rate_s',  
+        type=str, 
+        help='seconds between each check for newly added rows'
+        ) 
     parser.add_argument(
         '--this_sync_start',  
         type=str, 
@@ -77,6 +125,8 @@ if __name__ == "__main__":
     process_data_in_bq(
         args.gcp_project,
         args.bq_dataset,
-        args.bq_table,
-        args.this_sync_start
+        args.bq_table_prefix,
+        args.bq_table_date,
+        args.this_sync_start,
+        args.poll_rate_s
     )

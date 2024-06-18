@@ -21,6 +21,9 @@ BigQuery's continuous queries feature does not work with wildcard tables.
 This repo demonstrates the usage of BigQuery [change history TVF](https://cloud.google.com/bigquery/docs/change-history)
 to stream, in a micro batch manner, newly appended records to a wildcard table to Pub/Sub.
 
+## Required python version
+
+Python version 3.11+ is required to run this code. 
 
 ## Creating demo input - an example wildcard table
 
@@ -31,15 +34,17 @@ set some evironmental variables
 ```shell
 export GCP_PROJECT_ID=$(gcloud config list core/project --format="value(core.project)")
 
-export GCP_PROJECT_NUM=$(gcloud projects describe $GCP_PROJECT_ID --format="value(projectNumber)")
-
-export DEMO_DATE="20240610"
-
 export GCP_LOCATION="europe-west2"
 
 export BQ_DATASET="wildcard_stream_demo"
 
-export BQ_TABLE="events_intraday_${DEMO_DATE}"
+export BQ_TABLE_PREFIX="events_intraday"
+
+export BQ_TABLE_DATE="20240618"
+
+export POLL_RATE_SECONDS="5"
+
+export SYNC_START="2024-06-18 9:49:26.776000+00:00"
 ```
 
 create a dataset for this demo
@@ -67,7 +72,7 @@ python bq_gen_data.py \
 --bq_dataset=${BQ_DATASET} \
 --bq_table=${BQ_TABLE} \
 --interval=1 \
---total=10
+--total=100
 ```
 
 ## Creating demo app - the core program that does the micro-batch streaming
@@ -76,6 +81,8 @@ python bq_gen_data.py \
 python bq_stream_data.py \
 --gcp_project=${GCP_PROJECT_ID} \
 --bq_dataset=${BQ_DATASET} \
---bq_table=${BQ_TABLE} \
---this_sync_start="2024-06-10 10:49:26.776000"
+--bq_table_prefix=${BQ_TABLE_PREFIX} \
+--bq_table_date=${BQ_TABLE_DATE} \
+--poll_rate_s=${POLL_RATE_SECONDS} \
+--this_sync_start="${SYNC_START}"
 ```
