@@ -17,13 +17,13 @@ from google.cloud import bigquery
 import time
 
 ######################################################################################## 
-def gen_data(gcp_project, bq_dataset, bq_table, interval, total):
+def gen_data(gcp_project, bq_dataset, bq_table_prefix, bq_table_date, interval, total):
 
     # create a BigQuery client
     client = bigquery.Client()
     # Configure the query job.
     job_config = bigquery.QueryJobConfig()
-    job_config.destination = f"{gcp_project}.{bq_dataset}.{bq_table}"
+    job_config.destination = f"{gcp_project}.{bq_dataset}.{bq_table_prefix}_{bq_table_date}"
     job_config.write_disposition = bigquery.enums.WriteDisposition.WRITE_APPEND
     # Generate some synthetic data to be appended to the taget table
     query = """
@@ -40,7 +40,7 @@ def gen_data(gcp_project, bq_dataset, bq_table, interval, total):
     for i in range(total):
         # Run the query.
         client.query_and_wait( query, job_config=job_config)
-        print(f"generated record {i+1} out of {total}")
+        print(f"generated BigQuery record {i+1} out of {total}")
         time.sleep(interval)
 
 ########################################################################################
@@ -59,10 +59,15 @@ if __name__ == "__main__":
         help='target bigquery dataset'
         )
     parser.add_argument(
-        '--bq_table',  
+        '--bq_table_prefix',  
         type=str, 
-        help='target bigquery table'
+        help='target bigquery wildcard table prefix'
         )        
+    parser.add_argument(
+        '--bq_table_date',  
+        type=str, 
+        help='target bigquery wildcard table date YYYYMMDD'
+        )            
     parser.add_argument(
         '--interval', 
         type=int,
@@ -77,7 +82,8 @@ if __name__ == "__main__":
     gen_data(
         args.gcp_project,
         args.bq_dataset,
-        args.bq_table,
+        args.bq_table_prefix,
+        args.bq_table_date,
         args.interval,
         args.total
     )
